@@ -1,0 +1,19 @@
+# 环境变量（绝对不能提交）
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Node
+node_modules/
+dist/
+.next/
+
+# 系统文件
+.DS_Store
+*.swp

@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+/* Google Fonts - Playfair Display for headings, Noto Sans SC for Chinese */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+/*
+ * BrewLog 设计系统
+ * 
+ * 设计理念：温暖的手工感 + 精品咖啡的质感
+ * 色调来自咖啡本身——从浅烘的蜜糖色到深烘的焦棕色
+ * 不用科技感的蓝紫色，用有温度的暖色系
+ */
+
+:root {
+  /* 主色调 - 咖啡色系 */
+  --brew-cream: #FDF6EC;        /* 奶油白，主背景 */
+  --brew-latte: #F5E6D0;        /* 拿铁色，卡片背景 */
+  --brew-caramel: #D4A574;      /* 焦糖色，主强调色 */
+  --brew-espresso: #5C3D2E;     /* 浓缩咖啡色，主文字 */
+  --brew-dark: #3B2314;         /* 深烘色，标题 */
+  --brew-light-roast: #E8B86D;  /* 浅烘金，次要强调 */
+  
+  /* 功能色 */
+  --brew-success: #6B8F5E;      /* 橄榄绿，成功 */
+  --brew-warning: #D4A04A;      /* 琥珀色，警告 */
+  --brew-error: #B85C5C;        /* 暗红，错误 */
+  --brew-info: #7A9BB5;         /* 灰蓝，信息提示 */
+  
+  /* 风味标签色 */
+  --flavor-fruit: #E07B5D;      /* 水果 */
+  --flavor-floral: #C589A3;     /* 花香 */
+  --flavor-nutty: #A0845C;      /* 坚果 */
+  --flavor-sweet: #D4A04A;      /* 甜感 */
+  --flavor-acid: #7AAB7D;       /* 酸质 */
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--brew-cream);
+  color: var(--brew-espresso);
+  -webkit-font-smoothing: antialiased;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* 让整个应用在桌面端也保持手机宽度，居中显示 */
+#root {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Playfair Display 用于英文标题和品牌名 */
+.font-display {
+  font-family: 'Playfair Display', serif;
+}
+
+/* 动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* 解析结果卡片的逐行出现效果 */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+
+/* 底部导航栏安全区域（iPhone底部横条） */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brew-caramel);
+  border-radius: 2px;
+}
+
+/* 输入框焦点样式 */
+textarea:focus, input:focus {
+  outline: none;
+  border-color: var(--brew-caramel);
+  box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.2);
+}
