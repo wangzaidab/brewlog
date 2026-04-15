@@ -41,12 +41,19 @@ def test_brew_parsing_endpoint(case):
     parsed = data["parsed"]
     expected = case["expected"]
 
-    # 循环检查预期字段
     for field, expected_val in expected.items():
         actual_val = parsed.get(field)
         
-        # 针对浮点数做近似校验（防止 15.000000001 这种误差）
         if isinstance(expected_val, float):
+            # 浮点数用近似比较
+            assert actual_val == pytest.approx(expected_val, abs=0.5), \
+                f"字段 {field} 误差过大！预期: {expected_val}, 实际: {actual_val}"
+        elif isinstance(expected_val, str):
+            # 字符串用包含检查（双向）
             assert expected_val in str(actual_val) or str(actual_val) in expected_val, \
-        f"字段 {field} 解析错误！预期包含: {expected_val}, 实际: {actual_val}"
+                f"字段 {field} 解析错误！预期包含: {expected_val}, 实际: {actual_val}"
+        else:
+            # 其他类型直接相等比较
+            assert actual_val == expected_val, \
+                f"字段 {field} 解析错误！预期: {expected_val}, 实际: {actual_val}"
     print(f"✅ {case['id']} 测试通过")

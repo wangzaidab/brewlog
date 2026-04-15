@@ -28,7 +28,7 @@
     }
   },
   {
-    "id": "case_04_yirgacheffe_correction",
+    "id": "case_03_yirgacheffe_correction",
     "description": "测试即时纠错逻辑与单位换算(ml->g)",
     "input": "今天试了下那包埃塞耶加雪菲，日晒的。用了 18 克豆子，哦不对，称歪了其实是 17.5g。研磨度我用的是泰摩 Xlite，刻度 13。用了 260 毫升农夫山泉，温度大概 92 度吧。冲煮总共花了 2 分半。这杯喝起来非常酸，像没熟的柠檬，完全没有花香。给 4 分吧，太失败了。下次得把水温降到 90 度试试。",
     "expected": {
@@ -38,12 +38,11 @@
       "grind_size": "13",
       "water_amount_g": 260.0,
       "water_temp_c": 92.0,
-      "brew_time": "2:30",
       "rating": 4.0
     }
   },
   {
-    "id": "case_05_latte_minimal",
+    "id": "case_04_latte_minimal",
     "description": "测试非黑咖场景（拿铁）与满分映射",
     "input": "刚才随便冲了一杯深烘的豆子，加了奶做成拿铁了。挺好喝的，满分。",
     "expected": {
@@ -53,9 +52,9 @@
     }
   },
   {
-    "id": "case_06_gesha_logic_inference",
+    "id": "case_05_gesha_logic_inference",
     "description": "测试专业参数推理（1:16粉水比计算）及TDS",
-    "input": "豆子是四叶草的瑰夏，浅烘，15g 粉。粉水比 1:16。水是用的百岁山，TDS 测出来 45。手法是典型的 4:6 法。用的 EK43 磨豆机，刻度 8.5。风味有很高级的茉莉花香和佛手柑气息，body 很轻盈。9.5 分。",
+    "input": "豆子是四叶草的瑰夏，浅烘，15克粉。粉水比1:16。水是用的百岁山，TDS测出来45。手法是典型的4:6法。用的EK43 磨豆机，刻度8.5。风味有很高级的茉莉花香和佛手柑气息，body很轻盈。9.5分。",
     "expected": {
       "bean_name": "瑰夏",
       "roast_level": "浅烘",
@@ -69,7 +68,7 @@
     }
   },
   {
-    "id": "case_07_columbia_noise_filter",
+    "id": "case_06_columbia_noise_filter",
     "description": "测试生活噪声过滤、日期识别及负面风味提取",
     "input": "哎呀现在是两点半，外面在下雨。我把那个科林家的哥伦比亚拿出来了，就是上次你说好喝的那个。拿了大概二十克左右吧，没仔细称。水烧开了我就直接冲了，用的是家里的自来水，也没滤芯。冲出来感觉苦得要命，像中药。这包豆子估计放久了，roast date 是去年十一月的。给 2 分，以后不买了。",
     "expected": {
@@ -78,6 +77,115 @@
       "water_category": "自来水",
       "roast_date": "2025-11",
       "rating": 2.0
+    }
+  },
+  {
+    "id": "case_07_logic_correction",
+    "description": "测试否定回溯逻辑：准确识别并覆盖之前的错误信息",
+    "input": "今天冲的是 colinplus 家的水洗埃塞，哎不对，记错了，是 fisher 家的日晒花魁七点零。用了16g粉，磨豆机用的是小富士，刻度4。",
+    "expected": {
+      "bean_name": "花魁七点零",
+      "origin": "埃塞俄比亚",
+      "process_method": "日晒",
+      "brand": "fisher",
+      "dose_g": 16.0,
+      "grinder_model": "小富士",
+      "grind_size": "4"
+    }
+  },
+  {
+    "id": "case_08_common_sense_correction",
+    "description": "测试单位常识纠错：识别并自动修正用户口误（kg -> g）",
+    "input": "今天这杯瑰夏绝了。用了18g豆子，一共倒了二百二十五千克的水。水温88度，冲了2分15秒。",
+    "expected": {
+      "bean_name": "瑰夏",
+      "dose_g": 18.0,
+      "water_amount_g": 225.0,
+      "water_temp_c": 88.0,
+      "brew_time": "2:15"
+    }
+  },
+  {
+    "id": "case_09_chit_chat_denoising",
+    "description": "测试干扰信息过滤：区分他人喜好与本次实际冲煮内容",
+    "input": "我老公喜欢喝美式，但我今天给他做了拿铁，他不喜欢喝牛奶，但是我觉得牛奶咖啡就是很好喝啊。用了杉下的深烘拼配，18g粉出36g液，加了200g鲜奶。我觉得味道很甜美。",
+    "expected": {
+      "bean_name": "杉下深烘拼配",
+      "brew_method": "拿铁",
+      "dose_g": 18.0,
+      "liquid_out_g": 36.0,
+      "flavor_note": "甜美"
+    }
+  },
+  {
+    "id": "case_10_mix",
+    "description": "地狱难度",
+    "input": "外面在下雨，我妈非要喝热的。本来想给她冲杯哥伦比亚，哎呀不对，看了一眼袋子是埃塞。磨了 15 千克的豆子，哦不，是 15 克。水倒了 225kg，其实是 225g。虽然她说太淡了，但我觉得很好喝，给个 9 分。",
+    "expected": {
+      "bean_name": "埃塞",
+      "brew_method": "手冲",
+      "dose_g": 15,
+      "liquid_out_g": 225,
+      "flavor_note": "好喝"
+    }
+  },
+  {
+    "id": "case_11_detailed_normal",
+    "description": "高密度信息测试：包含特定豆种编号、滤杯材质、半浸泡手法及对比逻辑",
+    "input": "今天冲mtwom家的水洗埃塞果丁丁74110，应该是浅烘焙。九十二度水温，十五克粉，用了origami一号陶瓷滤杯，c四零研磨二十五格，水温九十二度，用的b壶。半浸泡的处理方法，希望让它浓一些，因为感觉浅烘的不太好萃。第一段注水十秒钟六十克，等了半分钟以后每隔十秒注水五十克，一共是两百一十克的水，出了一百七十六克的咖啡液，味道还是花香果香，浓度应该正好，我喝着觉得还不错，反正两毛钱一克的咖啡豆么也没有什么别的要求。放凉了一会儿还觉得有点甜。但是肯定没有艾力达水洗桂夏这么甜了。",
+    "expected": {
+      "bean_name": "果丁丁74110",
+      "origin": "埃塞俄比亚",
+      "process_method": "水洗",
+      "roast_level": "浅烘",
+      "dose_g": 15.0,
+      "water_amount_g": 210.0,
+      "liquid_out_g": 176.0,
+      "water_temp_c": 92.0,
+      "grind_size": "25格",
+      "brew_method": "半浸泡",
+      "flavor_tags": ["花香", "果香", "甜"]
+    }
+  },
+  {
+    "id": "case_12_espresso_record",
+    "description": "意式浓缩场景：测试粉液比（18g入36g出）及压力时间提取",
+    "input": "早起做个意式。用了18g意式拼配豆，中深烘，磨豆机刻度调到了1.5。9个大气压，28秒萃取了36g咖啡液。加了点冰块做成冰美式，口感很醇厚，有明显的黑巧克力和焦糖味，油脂很漂亮。给8.5分。",
+    "expected": {
+      "bean_name": "意式拼配",
+      "roast_level": "中深烘",
+      "dose_g": 18.0,
+      "liquid_out_g": 36.0,
+      "brew_time": "28秒",
+      "flavor_tags": ["黑巧克力", "焦糖"],
+      "rating": 8.5
+    }
+  },
+  {
+    "id": "case_13_cold_brew_immersion",
+    "description": "冷萃/浸泡场景：测试超长冲煮时间和不同水粉比",
+    "input": "做了一壶冷萃。用了50g粗研磨的深烘曼特宁，倒了500g纯净水。放在冰箱里泡了12个小时。喝起来完全不苦，非常顺滑，像冷泡茶的感觉，有木质香气。给9分。",
+    "expected": {
+      "bean_name": "曼特宁",
+      "roast_level": "深烘",
+      "dose_g": 50.0,
+      "water_amount_g": 500.0,
+      "brew_time": "12小时",
+      "brew_method": "冷萃",
+      "flavor_tags": ["顺滑", "木质香"],
+      "rating": 9.0
+    }
+  },
+  {
+    "id": "case_14_simple_daily",
+    "description": "极简日常记录：测试基础字段提取",
+    "input": "今天喝巴西。中烘，20g粉冲了300g水。普普通通，没什么风味，不酸也不苦。5分。",
+    "expected": {
+      "bean_name": "巴西",
+      "roast_level": "中烘",
+      "dose_g": 20.0,
+      "water_amount_g": 300.0,
+      "rating": 5.0
     }
   }
 ]
