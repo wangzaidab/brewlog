@@ -1,0 +1,83 @@
+[
+  {
+    "id": "case_01_kenya_v60",
+    "description": "肯尼亚水洗V60-标准复杂语料",
+    "input": "我今天冲了一杯浅烘肯尼亚水洗,用了15g咖啡豆,用c40磨豆机,23号研磨度,传统三段式注水方法,注入224g水,得到186g咖啡液。水温是93度,冲煮一共用了两分钟,用v60一号滤杯...这支肯尼亚是colinplus家的。我给今天的冲煮打8分。",
+    "expected": {
+      "bean_name": "肯尼亚",
+      "roast_level": "浅烘",
+      "process_method": "水洗",
+      "dose_g": 15.0,
+      "water_amount_g": 224.0,
+      "liquid_out_g": 186.0,
+      "water_temp_c": 93.0,
+      "rating": 8.0
+    }
+  },
+
+  {
+    "id": "case_02_moka_milk",
+    "description": "摩卡壶拼配-含干扰项和纠错",
+    "input": "今天冲的是杉下深烘拼配，标签描述是坚果巧克力。我用c40十二格用了17g豆子，但是摩卡壶没装下，撒出来了一小部分。在底壶加80克90度热水，用的农夫山泉。今天得到44g咖啡液，加了170g高钙水牛奶。",
+    "expected": {
+      "bean_name": "杉下深烘拼配",
+      "roast_level": "深烘",
+      "water_amount_g": 80.0,
+      "liquid_out_g": 44.0,
+      "water_brand": "农夫山泉"
+    }
+  },
+  {
+    "id": "case_04_yirgacheffe_correction",
+    "description": "测试即时纠错逻辑与单位换算(ml->g)",
+    "input": "今天试了下那包埃塞耶加雪菲，日晒的。用了 18 克豆子，哦不对，称歪了其实是 17.5g。研磨度我用的是泰摩 Xlite，刻度 13。用了 260 毫升农夫山泉，温度大概 92 度吧。冲煮总共花了 2 分半。这杯喝起来非常酸，像没熟的柠檬，完全没有花香。给 4 分吧，太失败了。下次得把水温降到 90 度试试。",
+    "expected": {
+      "bean_name": "埃塞耶加雪菲",
+      "process_method": "日晒",
+      "dose_g": 17.5,
+      "grind_size": "13",
+      "water_amount_g": 260.0,
+      "water_temp_c": 92.0,
+      "brew_time": "2:30",
+      "rating": 4.0
+    }
+  },
+  {
+    "id": "case_05_latte_minimal",
+    "description": "测试非黑咖场景（拿铁）与满分映射",
+    "input": "刚才随便冲了一杯深烘的豆子，加了奶做成拿铁了。挺好喝的，满分。",
+    "expected": {
+      "roast_level": "深烘",
+      "rating": 10.0,
+      "notes": "拿铁"
+    }
+  },
+  {
+    "id": "case_06_gesha_logic_inference",
+    "description": "测试专业参数推理（1:16粉水比计算）及TDS",
+    "input": "豆子是四叶草的瑰夏，浅烘，15g 粉。粉水比 1:16。水是用的百岁山，TDS 测出来 45。手法是典型的 4:6 法。用的 EK43 磨豆机，刻度 8.5。风味有很高级的茉莉花香和佛手柑气息，body 很轻盈。9.5 分。",
+    "expected": {
+      "bean_name": "瑰夏",
+      "roast_level": "浅烘",
+      "dose_g": 15.0,
+      "brew_ratio": "1:16",
+      "water_amount_g": 240.0,
+      "water_brand": "百岁山",
+      "water_tds": "45",
+      "brew_method": "4:6法",
+      "rating": 9.5
+    }
+  },
+  {
+    "id": "case_07_columbia_noise_filter",
+    "description": "测试生活噪声过滤、日期识别及负面风味提取",
+    "input": "哎呀现在是两点半，外面在下雨。我把那个科林家的哥伦比亚拿出来了，就是上次你说好喝的那个。拿了大概二十克左右吧，没仔细称。水烧开了我就直接冲了，用的是家里的自来水，也没滤芯。冲出来感觉苦得要命，像中药。这包豆子估计放久了，roast date 是去年十一月的。给 2 分，以后不买了。",
+    "expected": {
+      "bean_name": "哥伦比亚",
+      "dose_g": 20.0,
+      "water_category": "自来水",
+      "roast_date": "2025-11",
+      "rating": 2.0
+    }
+  }
+]
