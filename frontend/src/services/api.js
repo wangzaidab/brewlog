@@ -49,3 +49,4 @@ export async function healthCheck() {
   const response = await fetch(`${API_BASE}/health`);
   return response.json();
 }
+

@@ -1,6 +1,6 @@
 """
-BrewLog 后端 - 主文件
-用 FastAPI 构建 API，调用 DeepSeek 做自然语言解析
+BrewLog 后端 - 完整修复版 (v1.0)
+功能：AI 解析、记录保存、场景化历史查询、智能建议
 """
 
 from fastapi import FastAPI, HTTPException
@@ -15,17 +15,20 @@ import json
 import random
 import uuid
 
-# 读取 .env 文件中的环境变量
+# ============================================
+# 初始化配置
+# ============================================
+
+# 读取 .env 环境变量
 load_dotenv(dotenv_path="../.env")
 
-# 初始化 FastAPI 应用
 app = FastAPI(
     title="BrewLog API",
     description="说一句话，记一杯咖啡",
-    version="0.1.0"
+    version="1.0.0"
 )
 
-# CORS 配置
+# CORS 配置：允许前端访问
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -34,21 +37,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 初始化 DeepSeek 客户端
+# 初始化客户端
 deepseek_client = OpenAI(
     api_key=os.getenv("DEEPSEEK_API_KEY"),
     base_url="https://api.deepseek.com"
 )
 
-# 初始化 Supabase 客户端
 supabase = create_client(
     os.getenv("SUPABASE_URL"),
     os.getenv("SUPABASE_KEY")
 )
 
-
 # ============================================
-# 数据模型
+# 数据模型 (Pydantic Models)
 # ============================================
 
 class ParseRequest(BaseModel):
@@ -87,302 +88,191 @@ class ParseResponse(BaseModel):
     notifications: list[dict] = []
     error: str | None = None
 
-class SaveBrewRequest(BaseModel):
-    bean_name: str | None = None
-    brand: str | None = None
-    origin: str | None = None
-    process_method: str | None = None
-    roast_level: str | None = None
-    roast_date: str | None = None
-    rest_days: int | None = None
-    brew_method: str | None = None
-    dose_g: float | None = None
-    water_amount_g: float | None = None
-    liquid_out_g: float | None = None
-    brew_ratio: str | None = None
-    water_temp_c: float | None = None
-    grind_size: str | None = None
-    brew_time: str | None = None
-    water_brand: str | None = None
-    water_category: str | None = None
-    water_tds: str | None = None
+class SaveBrewRequest(ParsedBrew):
+    # 继承 ParsedBrew 所有字段，额外增加原始输入
+    raw_input: str
+    input_type: str = "text"
     grinder_model: str | None = None
     grinder_burr: str | None = None
     dripper_model: str | None = None
-    flavor_raw: list[str] | None = None
-    flavor_tags: list[str] | None = None
-    flavor_note: str | None = None
-    rating: float | None = None
-    notes: str | None = None
-    raw_input: str
-    input_type: str = "text"
-
 
 # ============================================
-# DeepSeek 解析 Prompt
+# AI 解析 Prompt
 # ============================================
 
-PARSE_SYSTEM_PROMPT = """你是 BrewLog 的智能解析引擎。用户会用自然语言描述一次咖啡冲煮体验，你需要从中提取结构化数据。
+PARSE_SYSTEM_PROMPT = """你是 BrewLog 的智能解析引擎。用户会用自然语言描述一次咖啡冲煮体验，你需要从中提取结构化数据并给出风味解读。
 
-## 你需要提取的字段
-0. brand:咖啡豆品牌/烘焙商名称（如"colinplus"、"Fisher"、"杉下咖啡"）。用户可能用简称如"colin家的"，你需要提取出品牌关键词。如果用户没提到品牌则为null。brand和bean_name要分开：brand是"谁卖的/谁烘的"，bean_name是"什么豆子"。
-1. bean_name: 豆种名称（如"肯尼亚 AA"、"耶加雪菲"）
-2. origin: 产地（如"肯尼亚"、"埃塞俄比亚"）
-3. process_method: 处理法（水洗/日晒/蜜处理/厌氧/湿刨法等）
-4. roast_level: 烘焙度（浅烘/中烘/中深/深烘）
-5. roast_date: 烘焙日期（ISO格式 YYYY-MM-DD。如果用户说"上周三"、"三天前"等相对时间，请根据今天的日期推算出具体日期）
-6. brew_method: 冲煮方式（如"V60 三段式"、"摩卡壶"、"法压壶"）
-7. dose_g: 粉重，单位克
-8. water_amount_g: 注水量，单位克
-9. liquid_out_g: 出液量，单位克
-10. water_temp_c: 水温，单位摄氏度
-11. grind_size: 研磨度（保留用户原始表述，如"C40第22格"、"中细"）
-12. brew_time: 冲煮时间
-13. water_brand: 水质品牌
-14. water_category: 水质分类（根据以下规则）
-15. water_tds: TDS 范围描述（根据以下规则）
-16. flavor_raw: 用户描述风味的原话（数组，保留原始表达）
-17. flavor_tags: 标准风味标签（数组，映射到 SCA 风味轮体系）
-18. flavor_note: 风味翻译说明（1-2句话，语气友好不说教，像一个温和的咖啡师朋友）
-19. rating: 用户的评分（1-10）
-20. notes: 无法归类到以上字段的其他信息
+## 需要提取的字段
 
-## 水质分类规则
+### 基础信息
+- brand: 品牌/烘焙商（如"colinplus"、"Fisher"）
+- bean_name: 豆种（如"肯尼亚 AA"）
+- origin: 产地
+- process_method: 处理法
+- roast_level: 烘焙度（浅烘/中烘/中深/深烘）
+- roast_date: 烘焙日期 (YYYY-MM-DD)
+- brew_method: 方式（如"V60"、"摩卡壶"）
+- dose_g: 粉重(g)
+- water_amount_g: 水量(g)
+- water_temp_c: 水温(℃)
+- rating: 评分 (1-10)
 
-| 用户表述 | water_brand | water_category | water_tds |
-|---------|-------------|----------------|-----------|
-| 农夫山泉 | 农夫山泉 | 天然矿泉水 | 中等 |
-| 怡宝 | 怡宝 | 纯净水 | 极低(~0) |
-| 怡宝+Aquacode 或类似调配 | 怡宝+Aquacode调配 | 定制矿物质水 | 定制 |
-| 百岁山 | 百岁山 | 天然矿泉水 | 较高 |
-| 屈臣氏蒸馏水 | 屈臣氏 | 蒸馏水 | 极低(~0) |
-| 自来水（无过滤） | 自来水 | 自来水(未过滤) | 未知 |
-| 过滤水/净水器过滤 | 自来水(过滤) | 过滤水 | 未知 |
-特别注意：如果用户明确给出了TDS的具体数值（如"TDS测出来45"），则water_tds字段直接填用户给的数值（如"45"），不使用上表的预设范围。
-## 风味翻译规则
+### 风味相关字段（三个字段必须都填）
+- flavor_raw: 用户原话中描述风味/口感的片段，数组形式保留原话。
+  示例：用户说"喝起来有点像蓝莓，还有淡淡花香"，则 flavor_raw = ["有点像蓝莓", "淡淡花香"]
+  
+- flavor_tags: 映射到 SCA 风味轮的标准词，数组形式。
+  示例：flavor_tags = ["蓝莓", "花香", "明亮果酸"]
+  
+- flavor_note: 风味小记。一段 30-60 字的自然语言点评，像一个懂咖啡的朋友在旁边聊天的语气。
+  要求：翻译用户的描述到咖啡行业术语，给出简短评价，不说教。
+  示例："你说的蓝莓感属于明亮果酸类，这是浅烘水洗肯尼亚的招牌风味，说明萃取到位了。"
+  如果用户没描述风味，flavor_note 返回 null。
 
-将用户的口语化风味描述映射到 SCA 咖啡风味轮的标准分类：
-- 大分类：花香、水果、酸质、甜感、坚果/可可、焦糖化、香料、谷物、烘烤、其他
-- 用户说"像蓝莓"→ flavor_tags 里写"蓝莓"，属于"水果"大类
-- 用户说"烤地瓜味"→ flavor_tags 里写"焦糖化/烤红薯"，属于"焦糖化"大类
+### 其他字段
+- notes: 用户文字中与冲煮无关的个人感受、场景描述（如"今天心情不错"、"下雨天适合喝咖啡"），保留用户原话。
 
-风味翻译说明（flavor_note）的语气要求：
-- 不纠正用户，而是"翻译+共情"
-- 当用户描述精准时给予肯定
+## 规则
 
-## 重要规则
-
-1. 用户没有提及的字段，设为 null，不要猜测
-2. 今天的日期是 {today}，用于推算相对日期
-3. flavor_raw 保留用户的原始表达，flavor_tags 映射到标准风味词
-4. 始终返回合法的 JSON，不要有多余的解释文字
-5. 常识纠错：当用户给出的数值明显不合理时（如"225千克的水"、"15千克咖啡豆"），应自动纠正为合理单位。咖啡冲煮的常识范围：粉重5-30g，注水量100-500g，水温70-100℃。超出这些范围的数值很可能是用户口误，应自动转换到合理范围。
-6. 自我纠正：当用户在描述中纠正了自己（如"哥伦比亚，哎不对，是埃塞"、"15千克，哦不，是15克"），以用户最后纠正的内容为准，忽略被纠正掉的信息。
-## 输出格式
-
-请严格返回以下 JSON 格式，不要包含任何其他文字：
-
-{{
-    "brand": "...",
-    "bean_name": "...", "origin": "...", "process_method": "...",
-    "roast_level": "...", "roast_date": "YYYY-MM-DD 或 null",
-    "rest_days": null, "brew_method": "...",
-    "dose_g": null, "water_amount_g": null, "liquid_out_g": null,
-    "brew_ratio": null, "water_temp_c": null, "grind_size": "...",
-    "brew_time": "...", "water_brand": "...", "water_category": "...",
-    "water_tds": "...",
-    "flavor_raw": [], "flavor_tags": [], "flavor_note": "...",
-    "rating": null, "notes": "..."
-}}"""
-
+1. 用户未提及的字段设为 null，不要猜测具体数值
+2. 今天的日期是 {today}
+3. 所有风味相关描述必须同时填入 flavor_raw 和 flavor_tags，并生成 flavor_note
+4. flavor_note 的语气要自然、温和，像朋友聊天，不要使用"你应该"、"建议你"等说教语气
+5. 严格返回合法的 JSON，不要有任何解释文字"""
 
 # ============================================
-# 智能提示规则引擎
+# 逻辑引擎 (Notifications)
 # ============================================
 
 def check_notifications(parsed: ParsedBrew) -> list[dict]:
-    notifications = []
-    
+    """单次冲煮建议"""
+    n = []
     if parsed.rest_days is not None:
-        if parsed.rest_days < 7:
-            notifications.append({"type": "rest_days_short", "message": f"这批豆子才养了{parsed.rest_days}天，风味可能还没完全打开，过几天再冲一杯对比看看？"})
-        elif parsed.rest_days > 60:
-            notifications.append({"type": "rest_days_long", "message": f"这批豆子烘焙已经{parsed.rest_days}天了，风味可能有所衰减，如果觉得味道变平了这可能是原因。"})
-    
-    if parsed.water_temp_c is not None and parsed.roast_level is not None:
-        roast, temp = parsed.roast_level, parsed.water_temp_c
-        if "浅" in roast and temp < 88:
-            notifications.append({"type": "temp_low_for_light", "message": f"浅烘豆配{temp}℃可能会萃取不足，容易出现尖酸感。试试提高到90-93℃？"})
-        elif "深" in roast and temp > 93:
-            notifications.append({"type": "temp_high_for_dark", "message": f"深烘豆配{temp}℃可能会过萃，容易出苦涩。试试降到88-90℃？"})
-        elif temp < 85 or temp > 96:
-            notifications.append({"type": "temp_unusual", "message": f"水温{temp}℃偏离常规范围，确认一下是否记录正确？"})
-    
-    if parsed.brew_ratio is not None:
-        try:
-            ratio_value = float(parsed.brew_ratio.replace("1:", ""))
-            if ratio_value < 12:
-                notifications.append({"type": "ratio_too_strong", "message": f"粉水比{parsed.brew_ratio}偏浓，确认一下注水量是否正确？"})
-            elif ratio_value > 18:
-                notifications.append({"type": "ratio_too_weak", "message": f"粉水比{parsed.brew_ratio}偏稀，确认一下粉重是否正确？"})
-        except (ValueError, AttributeError):
-            pass
-    
-    if parsed.grind_size is not None and parsed.brew_method is not None:
-        grind, method = parsed.grind_size.lower(), parsed.brew_method.lower()
-        if any(m in method for m in ["摩卡", "意式"]) and any(g in grind for g in ["粗", "中粗"]):
-            notifications.append({"type": "grind_mismatch", "message": "摩卡壶/意式通常用较细的研磨度，确认一下研磨设置？"})
-        elif any(m in method for m in ["法压"]) and any(g in grind for g in ["细", "极细"]):
-            notifications.append({"type": "grind_mismatch", "message": "法压壶通常用较粗的研磨度，太细可能会过萃且不好压。"})
-    
-    if parsed.rating is not None and parsed.rating <= 5:
-        msgs = ["冲煮实验本来就是试错的过程，记录下来就是进步。", "每一杯'不太好'的记录，都在帮你更接近完美的那一杯。", "就算是世界冠军也有翻车的时候，别太在意。", "数据记下来了，下一杯调整就有方向了。", "不好喝也是有价值的数据——至少你知道这组参数不太行了。"]
-        notifications.append({"type": "low_score_encouragement", "message": random.choice(msgs)})
-    
-    return notifications
-
+        if parsed.rest_days < 7: n.append({"type": "warning", "message": f"才养了{parsed.rest_days}天，风味可能没全开。"})
+    if parsed.water_temp_c and parsed.roast_level:
+        if "浅" in parsed.roast_level and parsed.water_temp_c < 88:
+            n.append({"type": "tip", "message": "浅烘豆建议水温高一点（90℃+）以充分萃取。"})
+    if parsed.rating and parsed.rating <= 5:
+        n.append({"type": "cheer", "message": "没关系，失败的记录也是通往好咖啡的必经之路。"})
+    return n
 
 def check_history_notifications(records: list) -> list[dict]:
-    notifications = []
-    if not records:
-        return notifications
-    
+    """历史里程碑建议"""
+    n = []
     total = len(records)
-    milestones = {1: "第一杯记录完成！好的开始。", 10: "第10杯！你已经开始建立自己的冲煮数据库了。", 30: "30杯！你的口味画像已经很清晰了，去数据页看看？", 50: "50杯！你比大多数手冲玩家都更了解自己的口味了。", 100: "100杯！你是认真的。"}
-    if total in milestones:
-        notifications.append({"type": "milestone", "message": milestones[total]})
-    
-    sorted_records = sorted(records, key=lambda r: r.get('created_at', ''), reverse=True)
-    recent = sorted_records[:3]
-    if len(recent) >= 3:
-        ratings = [r.get('rating') for r in recent if r.get('rating') is not None]
-        if len(ratings) >= 3 and all(r >= 8 for r in ratings):
-            notifications.append({"type": "high_score_streak", "message": f"最近状态不错！连续{len(ratings)}杯高分 🔥"})
-    
-    bean_groups = {}
-    for r in records:
-        name = r.get('bean_name')
-        if name:
-            bean_groups.setdefault(name, []).append(r)
-    
-    for bean_name, bean_records in bean_groups.items():
-        if len(bean_records) >= 3:
-            ratings = [r.get('rating') for r in bean_records if r.get('rating') is not None]
-            if ratings and sum(ratings) / len(ratings) < 6:
-                temps = [r.get('water_temp_c') for r in bean_records if r.get('water_temp_c') is not None]
-                if temps and (max(temps) - min(temps)) > 3:
-                    notifications.append({"type": "bean_quality_warning", "bean_name": bean_name, "message": f"「{bean_name}」你用不同参数冲了{len(bean_records)}次，评分都不太高。也许不是你的问题——有些豆子品质确实一般。试试换一包？"})
-    
-    return notifications
-
+    milestones = {1: "首杯记录！好的开始。", 10: "第10杯！你开始建立自己的风味库了。", 50: "50杯达成！你已经是资深玩家了。"}
+    if total in milestones: n.append({"type": "milestone", "message": milestones[total]})
+    return n
 
 # ============================================
-# API 接口
+# API 路由 (Endpoints)
 # ============================================
 
 @app.get("/")
 def root():
-    return {"message": "BrewLog API is running", "version": "0.1.0"}
+    return {"status": "ok", "app": "BrewLog API"}
 
 @app.post("/api/v1/brew/parse", response_model=ParseResponse)
 async def parse_brew(request: ParseRequest):
+    """接口 1: 调用 AI 解析文字描述"""
     if not request.raw_input.strip():
-        raise HTTPException(status_code=400, detail="输入不能为空")
+        raise HTTPException(status_code=400, detail="内容不能为空")
     try:
         today = date.today().isoformat()
-        system_prompt = PARSE_SYSTEM_PROMPT.replace("{today}", today)
+        prompt = PARSE_SYSTEM_PROMPT.format(today=today)
+        
         response = deepseek_client.chat.completions.create(
             model="deepseek-chat",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": request.raw_input}],
-            temperature=0.1, max_tokens=2000, response_format={"type": "json_object"}
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": request.raw_input}],
+            temperature=0.1,
+            response_format={"type": "json_object"}
         )
-        result_text = response.choices[0].message.content
-        parsed_data = json.loads(result_text)
-        parsed = ParsedBrew(**parsed_data)
         
+        data = json.loads(response.choices[0].message.content)
+        parsed = ParsedBrew(**data)
+        
+        # 计算辅助字段
         if parsed.dose_g and parsed.water_amount_g and parsed.dose_g > 0:
             parsed.brew_ratio = f"1:{round(parsed.water_amount_g / parsed.dose_g, 1)}"
         if parsed.roast_date:
-            try:
-                parsed.rest_days = (date.today() - date.fromisoformat(parsed.roast_date)).days
-            except ValueError:
-                pass
-        
-        missing = []
-        for field, label in {"bean_name": "豆种", "roast_level": "烘焙度", "brew_method": "冲煮方式", "dose_g": "粉重", "water_amount_g": "注水量", "water_temp_c": "水温", "grind_size": "研磨度", "rating": "评分"}.items():
-            if getattr(parsed, field) is None:
-                missing.append(label)
+            try: parsed.rest_days = (date.today() - date.fromisoformat(parsed.roast_date)).days
+            except: pass
+            
+        # 检查缺失
+        missing = [v for k, v in {"bean_name":"豆名","dose_g":"粉重","water_temp_c":"水温","rating":"评分"}.items() if getattr(parsed, k) is None]
         
         return ParseResponse(success=True, parsed=parsed, missing_fields=missing, notifications=check_notifications(parsed))
-    except json.JSONDecodeError as e:
-        return ParseResponse(success=False, error=f"AI 返回的数据格式有误，请重试。")
     except Exception as e:
-        return ParseResponse(success=False, error=f"解析失败：{str(e)}")
+        print(f"❌ AI解析报错: {str(e)}")
+        return ParseResponse(success=False, error=str(e))
 
 @app.post("/api/v1/brew/records")
 async def save_record(request: SaveBrewRequest):
-    """保存冲煮记录到 Supabase"""
+    """接口 2: 保存记录到数据库"""
     demo_user_id = "00000000-0000-0000-0000-000000000001"
-    record = {
-        "id": str(uuid.uuid4()),
-        "user_id": demo_user_id,
-        "brand": request.brand,
-        "bean_name": request.bean_name, "origin": request.origin,
-        "process_method": request.process_method, "roast_level": request.roast_level,
-        "roast_date": request.roast_date, "rest_days": request.rest_days,
-        "brew_method": request.brew_method, "dose_g": request.dose_g,
-        "water_amount_g": request.water_amount_g, "liquid_out_g": request.liquid_out_g,
-        "brew_ratio": request.brew_ratio, "water_temp_c": request.water_temp_c,
-        "grind_size": request.grind_size, "brew_time": request.brew_time,
-        "water_brand": request.water_brand, "water_category": request.water_category,
-        "water_tds": request.water_tds, "grinder_model": request.grinder_model,
-        "grinder_burr": request.grinder_burr, "dripper_model": request.dripper_model,
-        "flavor_raw": json.dumps(request.flavor_raw, ensure_ascii=False) if request.flavor_raw else None,
-        "flavor_tags": json.dumps(request.flavor_tags, ensure_ascii=False) if request.flavor_tags else None,
-        "flavor_note": request.flavor_note, "rating": request.rating,
-        "notes": request.notes, "raw_input": request.raw_input,
-        "input_type": request.input_type,
-    }
     try:
-        result = supabase.table("brew_records").insert(record).execute()
-        all_records = supabase.table("brew_records").select("*").eq("user_id", demo_user_id).order("created_at", desc=True).execute()
-        return {"success": True, "record": result.data[0] if result.data else None, "notifications": check_history_notifications(all_records.data)}
+        # 将数组转换为 Supabase 支持的格式（JSON 字符串）
+        data = request.dict()
+        data["user_id"] = demo_user_id
+        data["flavor_raw"] = json.dumps(data.get("flavor_raw", []), ensure_ascii=False)
+        data["flavor_tags"] = json.dumps(data.get("flavor_tags", []), ensure_ascii=False)
+        
+        result = supabase.table("brew_records").insert(data).execute()
+        
+        # 触发历史通知
+        all_res = supabase.table("brew_records").select("id").eq("user_id", demo_user_id).execute()
+        return {"success": True, "record": result.data[0] if result.data else None, "notifications": check_history_notifications(all_res.data)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"保存失败：{str(e)}")
+        print(f"❌ 保存报错: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/brew/records")
-async def get_records(page: int = 1, limit: int = 20, search: str | None = None, roast_level: str | None = None):
-    """获取冲煮记录列表"""
+async def get_records(page: int = 1, limit: int = 50, search: str | None = None, roast_level: str | None = None):
+    """接口 3: 获取并筛选历史记录"""
     demo_user_id = "00000000-0000-0000-0000-000000000001"
     try:
-        query = supabase.table("brew_records").select("*").eq("user_id", demo_user_id).order("created_at", desc=True)
-        if search:
-            query = query.or_(f"bean_name.ilike.%{search}%,origin.ilike.%{search}%")
-        if roast_level:
-            query = query.eq("roast_level", roast_level)
-        offset = (page - 1) * limit
-        query = query.range(offset, offset + limit - 1)
-        result = query.execute()
+        query = supabase.table("brew_records").select("*").eq("user_id", demo_user_id)
         
+        # 搜索逻辑：豆名 OR 产地 OR 品牌
+        if search:
+            query = query.or_(f"bean_name.ilike.%{search}%,origin.ilike.%{search}%,brand.ilike.%{search}%")
+        
+        # 场景化筛选逻辑
+        if roast_level and roast_level != "全部":
+            if roast_level == "🏆 神仙杯":
+                query = query.gte("rating", 8)
+            elif roast_level == "🚧 翻车复盘":
+                query = query.lte("rating", 5)
+            else:
+                query = query.eq("roast_level", roast_level)
+        
+        # 分页与排序
+        offset = (page - 1) * limit
+        result = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        # 格式化 JSON 字段
         records = []
         for r in result.data:
-            for field in ['flavor_raw', 'flavor_tags']:
-                if r.get(field) and isinstance(r[field], str):
-                    try: r[field] = json.loads(r[field])
-                    except: pass
+            for f in ['flavor_raw', 'flavor_tags']:
+                if r.get(f) and isinstance(r[f], str):
+                    try: r[f] = json.loads(r[f])
+                    except: r[f] = []
             records.append(r)
-        return {"success": True, "records": records, "page": page, "total": len(records)}
+            
+        return {"success": True, "records": records, "total": len(records)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"查询失败：{str(e)}")
+        print(f"\n🚨 后端查询逻辑报错: {str(e)}\n")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/v1/brew/records/{record_id}")
 async def delete_record(record_id: str):
+    """接口 4: 删除记录"""
     try:
         supabase.table("brew_records").delete().eq("id", record_id).execute()
         return {"success": True}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除失败：{str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/health")
-def health_check():
-    return {"api": "ok", "deepseek_key": "configured" if os.getenv("DEEPSEEK_API_KEY") else "missing", "supabase_url": "configured" if os.getenv("SUPABASE_URL") else "missing", "supabase_key": "configured" if os.getenv("SUPABASE_KEY") else "missing"}
+def health():
+    return {"api": "ok", "time": datetime.now().isoformat()}
